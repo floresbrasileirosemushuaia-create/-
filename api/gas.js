@@ -1,10 +1,15 @@
 /**
  * Vercel Serverless Function
- * Path obrigatório: /api/gas.js
- * (CommonJS) para funcionar mesmo sem package.json / type:module
+ * Caminho: /api/gas
+ * CommonJS para funcionar sem package.json / type:module
  */
+
+const WEBAPP_URL =
+  process.env.WEBAPP_URL ||
+  'https://script.google.com/macros/s/AKfycbyueYWKRtc8allm9E-C18gFHQSwxwEShuvBvvwMekR2tPikNL1eD8nvpfU4VpwyTIU-/exec';
+
 module.exports = async (req, res) => {
-  // CORS (mesma origem no Vercel, mas deixo liberado p/ debug)
+  // CORS (liberado para qualquer origem)
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -15,56 +20,47 @@ module.exports = async (req, res) => {
   }
 
   if (req.method !== 'POST') {
-    res.status(200).json({ ok: false, data: null, error: 'METHOD_NOT_ALLOWED' });
-    return;
-  }
-
-  const GAS_WEBAPP_URL =
-    process.env.GAS_WEBAPP_URL ||
-    'https://script.google.com/macros/s/AKfycbzh4ieD1tp5NZsrBQE-PF-k2YJujdg0VdkB99XUHCg6qFSBejSmDPpkFWbEpRFSsTmK/exec';
-
-  let body = req.body;
-
-  // Se vier string (depende do Content-Type), tenta parsear
-  if (typeof body === 'string') {
-    try { body = JSON.parse(body); } catch (e) { body = null; }
-  }
-
-  // Se vier vazio (Content-Type text/plain em alguns casos)
-  // tenta ler raw body do stream
-  if (!body) {
-    try {
-      const chunks = [];
-      for await (const c of req) chunks.push(c);
-      const raw = Buffer.concat(chunks).toString('utf8');
-      body = raw ? JSON.parse(raw) : null;
-    } catch (e) {
-      body = null;
-    }
-  }
-
-  if (!body || !body.action) {
-    res.status(200).json({ ok: false, data: null, error: 'BAD_REQUEST' });
+    res.status(405).json({
+      ok: false,
+      data: null,
+      error: 'METHOD_NOT_ALLOWED'
+    });
     return;
   }
 
   try {
-    const r = await fetch(GAS_WEBAPP_URL, {
+    const upstream = await fetch(WEBAPP_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // GAS sem preflight
-      body: JSON.stringify(body),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body || {})
     });
 
-    const txt = await r.text();
+    const text = await upstream.text();
+    let json;
 
     try {
-      const parsed = JSON.parse(txt);
-      res.status(200).json(parsed);
+      json = JSON.parse(text);
     } catch (e) {
-      res.status(200).json({ ok: false, data: null, error: 'GAS_NON_JSON', raw: txt });
+      // Apps Script não retornou JSON válido
+      json = {
+        ok: false,
+        data: null,
+        error: 'INVALID_JSON_FROM_GAS',
+        raw: text
+      };
     }
+
+    // Se o GAS ainda não usar {ok,data,error}, normalizo aqui
+    if (typeof json.ok !== 'boolean') {
+      json = { ok: true, data: json, error: null };
+    }
+
+    res.status(upstream.status).json(json);
   } catch (e) {
-    const msg = e && e.message ? e.message : String(e || 'ERROR');
-    res.status(200).json({ ok: false, data: null, error: msg });
+    res.status(500).json({
+      ok: false,
+      data: null,
+      error: e && e.message ? e.message : String(e || 'ERROR')
+    });
   }
 };
