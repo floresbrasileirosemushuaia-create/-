@@ -7,10 +7,11 @@
 
     <!-- Para GitHub/Vercel: URL do WebApp -->
     <script>
-      window.WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzh4ieD1tp5NZsrBQE-PF-k2YJujdg0VdkB99XUHCg6qFSBejSmDPpkFWbEpRFSsTmK/exec";
-  // Opcional: para GitHub Pages, coloque aqui a URL do seu Vercel + "/api/gas"
-  // Ex: "https://seu-projeto.vercel.app/api/gas"
-  window.API_PROXY_URL = "/api/gas";
+      // Cole aqui a URL do seu WebApp (Apps Script)
+      window.WEBAPP_URL = "COLE_AQUI_SEU_WEBAPP_URL";
+
+      // Vercel proxy (crie /api/gas.js no repo)
+      window.API_PROXY_URL = "/api/gas";
     </script>
 
     <!-- Bootstrap 5 -->
@@ -1899,15 +1900,13 @@ document.addEventListener('DOMContentLoaded', function () {
         };
 
         const onLoadFailure_ = function (err) {
-            console.error('CATALOG_LOAD_ERROR', err);
+          console.error('CATALOG_LOAD_ERROR', err);
 
-            var msg =
-              err && err.error
-                ? String(err.error)
-                : 'Error al cargar datos.';
+          var msg =
+            err && err.error ? String(err.error) : 'Error al cargar datos.';
 
-            document.getElementById('loadingOverlay').innerHTML =
-              '<div class="text-center text-danger">' + msg + '</div>';
+          document.getElementById('loadingOverlay').innerHTML =
+            '<div class="text-center text-danger">' + msg + '</div>';
         };
 
         apiCall('getCatalogoData')
