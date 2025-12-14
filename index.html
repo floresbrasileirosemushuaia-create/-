@@ -1899,10 +1899,15 @@ document.addEventListener('DOMContentLoaded', function () {
         };
 
         const onLoadFailure_ = function (err) {
+            console.error('CATALOG_LOAD_ERROR', err);
 
-            console.error(err);
+            var msg =
+              err && err.error
+                ? String(err.error)
+                : 'Error al cargar datos.';
+
             document.getElementById('loadingOverlay').innerHTML =
-              '<div class="text-center text-danger">Error al cargar datos.</div>';
+              '<div class="text-center text-danger">' + msg + '</div>';
         };
 
         apiCall('getCatalogoData')
