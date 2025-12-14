@@ -7,11 +7,10 @@
 
     <!-- Para GitHub/Vercel: URL do WebApp -->
     <script>
-      // Cole aqui a URL do seu WebApp (Apps Script)
-      window.WEBAPP_URL = "COLE_AQUI_SEU_WEBAPP_URL";
-
-      // Vercel proxy (crie /api/gas.js no repo)
-      window.API_PROXY_URL = "/api/gas";
+      window.WEBAPP_URL = "https://script.google.com/macros/s/AKfycbwDqVTHLT-xOPDeV0VCnyqyhlq7mxDycLAqIfo3uUkOR_6-_CqMS5BUBy7KPgV4hj8N/exec";
+  // Opcional: para GitHub Pages, coloque aqui a URL do seu Vercel + "/api/gas"
+  // Ex: "https://seu-projeto.vercel.app/api/gas"
+  window.API_PROXY_URL = "";
     </script>
 
     <!-- Bootstrap 5 -->
@@ -1762,12 +1761,19 @@
                 runner[fnName](payload);
               }
             } else {
-              var url =
-                (typeof window !== 'undefined' &&
-                  (window.API_PROXY_URL || window.WEBAPP_URL)) ||
-                '';
+              var proxyUrl =
+                (typeof window !== 'undefined' && window.API_PROXY_URL) || '';
+              var webappUrl =
+                (typeof window !== 'undefined' && window.WEBAPP_URL) || '';
 
-              if (!url) {
+              proxyUrl = (proxyUrl || '').toString().trim();
+              webappUrl = (webappUrl || '').toString().trim();
+
+              var endpoints = [];
+              if (proxyUrl) endpoints.push(proxyUrl);
+              if (webappUrl && webappUrl !== proxyUrl) endpoints.push(webappUrl);
+
+              if (endpoints.length === 0) {
                 resolve({
                   ok: false,
                   data: null,
@@ -1776,28 +1782,53 @@
                 return;
               }
 
-              fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  action: fnName,
-                  payload: typeof payload === 'undefined' ? {} : payload
+              var bodyObj = {
+                action: fnName,
+                payload: typeof payload === 'undefined' ? {} : payload
+              };
+
+              function tryFetch_(idx) {
+                var url = endpoints[idx];
+                fetch(url, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(bodyObj)
                 })
-              })
-                .then(function (resp) {
-                  if (!resp.ok) {
-                    throw new Error('HTTP_' + resp.status);
-                  }
-                  return resp.json();
-                })
-                .then(function (json) {
-                  resolve(normalizeApiResponse_(json));
-                })
-                .catch(function (err) {
-                  var msg =
-                    err && err.message ? err.message : String(err || 'ERROR');
-                  resolve({ ok: false, data: null, error: msg });
-                });
+                  .then(function (resp) {
+                    if (!resp.ok) {
+                      throw new Error('HTTP_' + resp.status);
+                    }
+                    return resp.text().then(function (txt) {
+                      try {
+                        return JSON.parse(txt);
+                      } catch (e) {
+                        var snippet = (txt || '')
+                          .slice(0, 200)
+                          .replace(/\s+/g, ' ');
+                        var parseErr = new Error('INVALID_JSON_FROM_ENDPOINT');
+                        parseErr.details = snippet;
+                        throw parseErr;
+                      }
+                    });
+                  })
+                  .then(function (json) {
+                    resolve(normalizeApiResponse_(json));
+                  })
+                  .catch(function (err) {
+                    if (idx + 1 < endpoints.length) {
+                      tryFetch_(idx + 1);
+                      return;
+                    }
+                    var msg =
+                      err && err.message ? err.message : String(err || 'ERROR');
+                    if (err && err.details) {
+                      msg += ' | ' + err.details;
+                    }
+                    resolve({ ok: false, data: null, error: msg });
+                  });
+              }
+
+              tryFetch_(0);
             }
           } catch (e) {
             var msg2 =
@@ -1900,13 +1931,15 @@ document.addEventListener('DOMContentLoaded', function () {
         };
 
         const onLoadFailure_ = function (err) {
-          console.error('CATALOG_LOAD_ERROR', err);
+            console.error('CATALOG_LOAD_ERROR', err);
 
-          var msg =
-            err && err.error ? String(err.error) : 'Error al cargar datos.';
+            var msg =
+              err && err.error
+                ? String(err.error)
+                : 'Error al cargar datos.';
 
-          document.getElementById('loadingOverlay').innerHTML =
-            '<div class="text-center text-danger">' + msg + '</div>';
+            document.getElementById('loadingOverlay').innerHTML =
+              '<div class="text-center text-danger">' + msg + '</div>';
         };
 
         apiCall('getCatalogoData')
