@@ -1731,381 +1731,83 @@
         return { ok: true, data: obj, error: null };
       }
 
+      
       function apiCall(fnName, payload) {
         return new Promise(function (resolve) {
           try {
             if (isGASEnvironment_()) {
-              var runner = const onLoadSuccess_ = function (data) {
-            catalogData =
-              data || {
-                categories: [],
-                items: [],
-                headers: [],
-                logoUrl: '',
-                rates: { brl: null, usd: null },
-                defaultPhone: '',
-                obsCols: { es: -1, pt: -1, en: -1 }
-              };
-
-            if (catalogData.logoUrl) {
-              const img = document.getElementById('logoImg');
-              img.src = catalogData.logoUrl;
-            }
-
-            if (catalogData.rates) {
-              exchangeRates.brl = catalogData.rates.brl || null;
-              exchangeRates.usd = catalogData.rates.usd || null;
-            }
-            if (catalogData.defaultPhone) {
-              whatsappPhone = String(catalogData.defaultPhone);
-            }
-
-            if (data && data.obsCols) {
-              obsColIndexes.es = data.obsCols.es;
-              obsColIndexes.pt = data.obsCols.pt;
-              obsColIndexes.en = data.obsCols.en;
-              obsColumnsComputed = true;
-            }
-
-            // carrega cache local
-            const cached = loadAppStateFromStorage();
-            if (cached) {
-              if (cached.lang) currentLang = cached.lang;
-              if (cached.currency) currentCurrency = cached.currency;
-            }
-
-            updateLanguageButtons();
-            updateCurrencyButtons();
-            applyTranslations();
-            renderCategories();
-
-            document.getElementById('loadingOverlay').style.display = 'none';
-
-            const cartBtn = document.getElementById('cartFloatingBtn');
-            cartBtn.classList.remove('d-none');
-            cartBtn.classList.remove('btn-danger');
-            cartBtn.classList.add('btn-primary');
-            updateCartUI();
-
-            loginModalInstance = new bootstrap.Modal(
-              document.getElementById('loginModal')
-            );
-
-            // pré-preenche campos do cache
-            if (cached) {
-              if (cached.loginName) {
-                document.getElementById('loginNameInput').value =
-                  cached.loginName;
-              }
-              if (cached.guestName) {
-                document.getElementById('guestNameInput').value =
-                  cached.guestName;
-              }
-              if (cached.phoneCountry) {
-                document.getElementById(
-                  'guestPhoneCountryInput'
-                ).value = cached.phoneCountry;
-              }
-              if (cached.phone) {
-                document.getElementById('guestPhoneInput').value =
-                  cached.phone;
-              }
-              if (cached.hotel) {
-                document.getElementById('hotelInput').value = cached.hotel;
-              }
-            }
-
-            loginModalInstance.show();
-
-            document.addEventListener('keydown', function (e) {
-              if (e.key === 'Escape' || e.key === 'Esc') {
-                closeAllModals();
-              }
-            });
-          };
-        const onLoadFailure_ = function (err) {
-                  var msg = err && err.message ? err.message : String(err || 'ERROR');
+              var runner = google.script.run
+                .withSuccessHandler(function (res) {
+                  resolve(normalizeApiResponse_(res));
+                })
+                .withFailureHandler(function (err) {
+                  var msg =
+                    err && err.message ? err.message : String(err || 'ERROR');
                   resolve({ ok: false, data: null, error: msg });
                 });
 
               if (!runner[fnName]) {
-                resolve({ ok: false, data: null, error: 'FN_NOT_FOUND: ' + fnName });
+                resolve({
+                  ok: false,
+                  data: null,
+                  error: 'FN_NOT_FOUND: ' + fnName
+                });
                 return;
               }
 
-              if (typeof payload === 'undefined') runner[fnName]();
-              else runner[fnName](payload);
-              return;
-            }
-
-            var proxy = String(window.API_PROXY_URL || '').trim();
-            var endpoint = proxy || '/api/gas';
-
-            function parseTextAsJson_(txt) {
-              var parsed = null;
-              try {
-                parsed = JSON.parse(txt);
-              } catch (e) {
-                return { ok: false, data: null, error: 'JSON_INVALIDO' };
+              if (typeof payload === 'undefined') {
+                runner[fnName]();
+              } else {
+                runner[fnName](payload);
               }
-              return normalizeApiResponse_(parsed);
-            }
+            } else {
+              var url =
+                (typeof window !== 'undefined' &&
+                  (window.API_PROXY_URL || window.WEBAPP_URL)) ||
+                '';
 
-            function doFetch_(ep, headersObj, bodyStr) {
-              return fetch(ep, {
+              if (!url) {
+                resolve({
+                  ok: false,
+                  data: null,
+                  error: 'NO_ENDPOINT_CONFIGURED'
+                });
+                return;
+              }
+
+              fetch(url, {
                 method: 'POST',
-                headers: headersObj,
-                body: bodyStr
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  action: fnName,
+                  payload: typeof payload === 'undefined' ? {} : payload
+                })
               })
                 .then(function (resp) {
-                  if (!resp.ok) throw new Error('HTTP_' + resp.status);
-                  return resp.text();
+                  if (!resp.ok) {
+                    throw new Error('HTTP_' + resp.status);
+                  }
+                  return resp.json();
                 })
-                .then(function (txt) {
-                  return parseTextAsJson_(txt);
+                .then(function (json) {
+                  resolve(normalizeApiResponse_(json));
+                })
+                .catch(function (err) {
+                  var msg =
+                    err && err.message ? err.message : String(err || 'ERROR');
+                  resolve({ ok: false, data: null, error: msg });
                 });
             }
-
-            // 1) Preferir proxy (Vercel /api) para evitar CORS do Apps Script
-            doFetch_(endpoint, { 'Content-Type': 'application/json' },
-              JSON.stringify({ action: fnName, payload: payload })
-            )
-              .catch(function (err) {
-                // 2) Fallback: tentar direto no WebApp (pode ser bloqueado por CORS fora do GAS)
-                var url = String(window.WEBAPP_URL || '').trim();
-                if (!url) throw err;
-                return doFetch_(url, { 'Content-Type': 'text/plain;charset=utf-8' },
-                  JSON.stringify({ action: fnName, payload: payload })
-                );
-              })
-              .then(function (apiObj) {
-                resolve(apiObj);
-              })
-              .catch(function (err) {
-                var msg = err && err.message ? err.message : String(err || 'ERROR');
-                resolve({ ok: false, data: null, error: msg });
-              });
           } catch (e) {
-            var msg = e && e.message ? e.message : String(e || 'ERROR');
-            resolve({ ok: false, data: null, error: msg });
+            var msg2 =
+              e && e.message ? e.message : String(e || 'ERROR');
+            resolve({ ok: false, data: null, error: msg2 });
           }
         });
       }
 
 
-      let catalogData = {
-        categories: [],
-        items: [],
-        headers: [],
-        logoUrl: '',
-        rates: { brl: null, usd: null },
-        defaultPhone: '',
-        obsCols: { es: -1, pt: -1, en: -1 }
-      };
-
-      let cart = [];
-      let currentServiceItems = [];
-      let currentCategoryForServices = null;
-      let searchResults = [];
-
-      let currentUserContext = {
-        userName: '',
-        empresa: '',
-        prefijo: '',
-        id: ''
-      };
-
-      let currentLang = 'es';
-      let currentCurrency = 'ars';
-
-      let exchangeRates = { brl: null, usd: null };
-      let whatsappPhone = '5492901533382';
-
-      let loginModalInstance = null;
-      let addingToCartModalInstance = null;
-
-      // índices de OBS na planilha (0-based)
-      let obsColIndexes = { es: null, pt: null, en: null };
-      let obsColumnsComputed = false;
-
-      // colunas principais (0-based)
-      const TITLE_MAIN_COL_INDEX = 0; // tipo/grupo
-      const TITLE_ACTIVITY_COL_INDEX = 1; // Actividad
-      const SERVICE_TYPE_COL_INDEX = 2; // Categoria
-
-      // storage
-      const STORAGE_KEY = 'perlaAppState_v2';
-
-      const I18N = {
-        es: {
-          appTitle: 'Catálogo de excursiones',
-          appSubtitle:
-            'Toca una categoría o usá la búsqueda para armar tu pedido.',
-          searchLabel: 'Buscar excursiones',
-          searchPlaceholder: 'Ej: gourmet, chaltén, navegación...',
-          categoriesTitle: 'Categorías',
-          categoryHint: 'Selecciona la excursión para agregar a la lista',
-          cartTitle: 'Mi lista',
-          cartEmpty:
-            'Tu lista está vacía. Agregá excursiones para enviar el pedido.',
-          cartTotalLabel: 'Total estimado (ARS):',
-          btnMoreInfo: 'MÁS INFO',
-          btnAddToList: 'Añadir a la lista',
-          btnClearCart: 'Vaciar lista',
-          btnSendWhatsapp: 'Enviar pedido por WhatsApp',
-          checkoutTitle: 'Datos para el envío',
-          guestNameLabel: 'Nombre del pasajero (obligatorio)',
-          guestPhoneLabel: 'Teléfono de contacto (obligatorio)',
-          hotelLabel: 'Hospedaje (hotel/departamento) (opcional)',
-          datesSectionTitle: 'Fechas (opcional, por excursión)',
-          dateLabelPerService: 'Fecha de la excursión (opcional)',
-          copyInfoButton: 'Copiar texto',
-          copyInfoSuccess: 'Copiado.',
-          copyInfoFail: 'No se pudo copiar.',
-          moreInfoTitle: 'Más información',
-          moreInfoEmpty: 'Sin información adicional.',
-          addingToCartMsg: 'Agregando al carrito...',
-          addingToCartDone: 'Agregado al carrito.',
-          addingToCartOpenCartBtn: 'Abrir carrito',
-          sendingOverlayText: 'Enviando pedido...',
-          cartFeedback: function (count, totalStr) {
-            return (
-              'Tenés ' +
-              count +
-              ' servicio(s) en la lista. Total estimado: ' +
-              totalStr +
-              '.'
-            );
-          },
-          loginTitle: 'Ingresar',
-          loginNameLabel: 'Tu nombre',
-          loginButton: 'Entrar',
-          loginErrorEmpty: 'Ingresá tu nombre.',
-          loginErrorUserNotFound:
-            'El nombre no coincide con la lista de usuarios. Verificá y probá de nuevo.',
-          loginErrorGenericConfig:
-            'No se pudo validar la configuración de login (se usará un perfil genérico).',
-          alertCartEmpty: 'Tu lista está vacía.',
-          alertGuestNameRequired: 'Ingresá el nombre del pasajero.',
-          alertGuestPhoneRequired: 'Ingresá el teléfono de contacto.',
-          searchNoResults: 'Sin resultados para esta búsqueda.',
-          noServicesMessage: 'No se encontraron ítems para esta categoría.',
-          confirmClearCart: '¿Vaciar toda la lista de excursiones?',
-          cartDeleteLabel: 'Eliminar',
-          btnCheckoutBack: 'Volver'
-        },
-        pt: {
-          appTitle: 'Catálogo de excursões',
-          appSubtitle:
-            'Toque uma categoria ou use a busca para montar seu pedido.',
-          searchLabel: 'Buscar excursões',
-          searchPlaceholder: 'Ex: gourmet, chaltén, navegação...',
-          categoriesTitle: 'Categorias',
-          categoryHint: 'Selecione o passeio para adicionar à lista',
-          cartTitle: 'Minha lista',
-          cartEmpty:
-            'Sua lista está vazia. Adicione excursões para enviar o pedido.',
-          cartTotalLabel: 'Total estimado (ARS):',
-          btnMoreInfo: 'MAIS INFO',
-          btnAddToList: 'Adicionar à lista',
-          btnClearCart: 'Esvaziar lista',
-          btnSendWhatsapp: 'Enviar pedido por WhatsApp',
-          checkoutTitle: 'Dados para envio',
-          guestNameLabel: 'Nome do passageiro (obrigatório)',
-          guestPhoneLabel: 'Telefone de contato (obrigatório)',
-          hotelLabel: 'Hospedagem (hotel/apartamento) (opcional)',
-          datesSectionTitle: 'Datas (opcional, por passeio)',
-          dateLabelPerService: 'Data do passeio (opcional)',
-          copyInfoButton: 'Copiar texto',
-          copyInfoSuccess: 'Copiado.',
-          copyInfoFail: 'Não foi possível copiar.',
-          moreInfoTitle: 'Mais informações',
-          moreInfoEmpty: 'Sem informações adicionais.',
-          addingToCartMsg: 'Adicionando ao carrinho...',
-          addingToCartDone: 'Adicionado ao carrinho.',
-          addingToCartOpenCartBtn: 'Abrir carrinho',
-          sendingOverlayText: 'Enviando pedido...',
-          cartFeedback: function (count, totalStr) {
-            return (
-              'Você tem ' +
-              count +
-              ' serviço(s) na lista. Total estimado: ' +
-              totalStr +
-              '.'
-            );
-          },
-          loginTitle: 'Entrar',
-          loginNameLabel: 'Seu nome',
-          loginButton: 'Entrar',
-          loginErrorEmpty: 'Informe seu nome.',
-          loginErrorUserNotFound:
-            'O nome não coincide com a lista de usuários. Verifique e tente novamente.',
-          loginErrorGenericConfig:
-            'Não foi possível validar a configuração de login (será usado um perfil genérico).',
-          alertCartEmpty: 'Sua lista está vazia.',
-          alertGuestNameRequired: 'Informe o nome do passageiro.',
-          alertGuestPhoneRequired: 'Informe o telefone de contato.',
-          searchNoResults: 'Sem resultados para esta busca.',
-          noServicesMessage:
-            'Nenhum item encontrado para esta categoria.',
-          confirmClearCart: 'Esvaziar toda a lista de excursões?',
-          cartDeleteLabel: 'Excluir',
-          btnCheckoutBack: 'Voltar'
-        },
-        en: {
-          appTitle: 'Tour catalog',
-          appSubtitle:
-            'Tap a category or use search to build your request.',
-          searchLabel: 'Search tours',
-          searchPlaceholder: 'E.g. gourmet, chaltén, navigation...',
-          categoriesTitle: 'Categories',
-          categoryHint: 'Select the tour to add it to the list',
-          cartTitle: 'My list',
-          cartEmpty:
-            'Your list is empty. Add tours to send your request.',
-          cartTotalLabel: 'Estimated total (ARS):',
-          btnMoreInfo: 'MORE INFO',
-          btnAddToList: 'Add to list',
-          btnClearCart: 'Empty list',
-          btnSendWhatsapp: 'Send request via WhatsApp',
-          checkoutTitle: 'Details to send',
-          guestNameLabel: 'Passenger name (required)',
-          guestPhoneLabel: 'Contact phone (required)',
-          hotelLabel: 'Accommodation (hotel/apartment) (optional)',
-          datesSectionTitle: 'Dates (optional, per tour)',
-          dateLabelPerService: 'Tour date (optional)',
-          copyInfoButton: 'Copy text',
-          copyInfoSuccess: 'Copied.',
-          copyInfoFail: 'Could not copy.',
-          moreInfoTitle: 'More information',
-          moreInfoEmpty: 'No additional information.',
-          addingToCartMsg: 'Adding to cart...',
-          addingToCartDone: 'Added to cart.',
-          addingToCartOpenCartBtn: 'Open cart',
-          sendingOverlayText: 'Sending request...',
-          cartFeedback: function (count, totalStr) {
-            return (
-              'You have ' +
-              count +
-              ' service(s) in the list. Estimated total: ' +
-              totalStr +
-              '.'
-            );
-          },
-          loginTitle: 'Sign in',
-          loginNameLabel: 'Your name',
-          loginButton: 'Enter',
-          loginErrorEmpty: 'Please type your name.',
-          loginErrorUserNotFound:
-            'Name does not match the user list. Check and try again.',
-          loginErrorGenericConfig:
-            'Login configuration could not be validated (a generic profile will be used).',
-          alertCartEmpty: 'Your list is empty.',
-          alertGuestNameRequired: 'Please enter the passenger name.',
-          alertGuestPhoneRequired: 'Please enter the contact phone.',
-          searchNoResults: 'No results for this search.',
-          noServicesMessage: 'No items found for this category.',
-          confirmClearCart: 'Empty all tours from the lisdocument.addEventListener('DOMContentLoaded', function () {
+document.addEventListener('DOMContentLoaded', function () {
         const onLoadSuccess_ = function (data) {
 
             catalogData =
@@ -2212,65 +1914,7 @@
             onLoadSuccess_(apiRes.data);
           })
           .catch(onLoadFailure_);
-});
-
-        }
-            onLoadSuccess_(apiRes.data);
-          })
-          .catch(onLoadFailure_);
-});
-
-      function closeAllModals() {
-        const ids = [
-          'loginModal',
-          'moreInfoModal',
-          'cartModal',
-          'checkoutModal',
-          'addingToCartModal',
-          'confirmClearCartModal'
-        ];
-        ids.forEach(function (id) {
-          const el = document.getElementById(id);
-          if (!el) return;
-          const instance =
-            bootstrap.Modal.getInstance(el) ||
-            bootstrap.Modal.getOrCreateInstance(el);
-          instance.hide();
-        });
-      }
-
-      function setSendingOverlayVisible(visible) {
-        const el = document.getElementById('sendingOverlay');
-        if (!el) return;
-        el.style.display = visible ? 'flex' : 'none';
-      }
-
-      /* IDIOMA & MOEDA */
-
-      function setLanguage(lang) {
-        if (lang === 'pt' || lang === 'en') {
-          currentLang = lang;
-        } else {
-          currentLang = 'es';
-        }
-        updateLanguageButtons();
-        applyTranslations();
-        renderCategories();
-        updateCartUI();
-        handleSearchInput();
-        saveAppStatePartial();
-
-        const servicesPage = document.getElementById('pageServices');
-        if (
-          servicesPage &&
-          !servicesPage.classList.contains('d-none') &&
-          currentCategoryForServices
-        ) {
-          openServicesModal(currentCategoryForServices);
-        }
-      }
-
-      function setCurrency(curr) {
+});function setCurrency(curr) {
         if (curr === 'brl' || curr === 'usd') {
           currentCurrency = curr;
         } else {
