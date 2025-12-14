@@ -7,7 +7,7 @@
 
     <!-- Para GitHub/Vercel: URL do WebApp -->
     <script>
-      window.WEBAPP_URL = "rows.push(";
+      window.WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzh4ieD1tp5NZsrBQE-PF-k2YJujdg0VdkB99XUHCg6qFSBejSmDPpkFWbEpRFSsTmK/exec";
     </script>
 
     <!-- Bootstrap 5 -->
@@ -2084,15 +2084,9 @@
           alertGuestPhoneRequired: 'Please enter the contact phone.',
           searchNoResults: 'No results for this search.',
           noServicesMessage: 'No items found for this category.',
-          confirmClearCart: 'Empty all tours from the list?',
-          cartDeleteLabel: 'Delete',
-          btnCheckoutBack: 'Back'
-        }
-      };
+          confirmClearCart: 'Empty all tours from the lisdocument.addEventListener('DOMContentLoaded', function () {
+        const onLoadSuccess_ = function (data) {
 
-      document.addEventListener('DOMContentLoaded', function () {
-        google.script.run
-          .withSuccessHandler(function (data) {
             catalogData =
               data || {
                 categories: [],
@@ -2106,7 +2100,7 @@
 
             if (catalogData.logoUrl) {
               const img = document.getElementById('logoImg');
-              img.src = catalogData.logoUrl;
+              if (img) img.src = catalogData.logoUrl;
             }
 
             if (catalogData.rates) {
@@ -2179,12 +2173,14 @@
                 closeAllModals();
               }
             });
-          })
-          .withFailureHandler(function (err) {
+        };
+
+        const onLoadFailure_ = function (err) {
+
             console.error(err);
             document.getElementById('loadingOverlay').innerHTML =
               '<div class="text-center text-danger">Error al cargar datos.</div>';
-          };
+        };
 
         apiCall('getCatalogoData')
           .then(function (apiRes) {
@@ -2192,6 +2188,12 @@
               onLoadFailure_(apiRes);
               return;
             }
+            onLoadSuccess_(apiRes.data);
+          })
+          .catch(onLoadFailure_);
+});
+
+        }
             onLoadSuccess_(apiRes.data);
           })
           .catch(onLoadFailure_);
